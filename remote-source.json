@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": 1,
+  "version": 2,
   "baseUrl": "https://z3.idlixku.com/",
   "userAgent": "IdlixTV-Client/1.0 (Android TV)",
   "endpoints": {
@@ -27,8 +27,12 @@
     "apiPrefix": "api",
     "watchPath": "watch",
     "redeemPath": "api/watch/session/redeem",
-    "fallbackRedeemUrls": ["https://e2e.majorplay.net/api/play"],
-    "sourceHostSuffixes": ["idlixku.com"],
+    "fallbackRedeemUrls": [
+      "https://e2e.majorplay.net/api/play"
+    ],
+    "sourceHostSuffixes": [
+      "idlixku.com"
+    ],
     "gateOwnerRegex": "\"owner\":\"d:([^\"]+)\"",
     "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
     "didCookieRegex": "did=([a-fA-F0-9]{20,64})"
@@ -37,5 +41,87 @@
     "catalogue": null,
     "episode": null
   },
-  "embedRegexes": []
+  "embedRegexes": [],
+  "sources": {
+    "dutamovie": {
+      "domains": [
+        "https://itoshii-movie.com/"
+      ]
+    },
+    "filmkita": {
+      "domains": [
+        "https://s9.iix.llc/"
+      ]
+    },
+    "filmlokal": {
+      "domains": [
+        "https://tv1.filmlokal.me/"
+      ]
+    },
+    "indomax": {
+      "domains": [
+        "https://idmxl.ink/"
+      ]
+    },
+    "kawanfilm": {
+      "domains": [
+        "https://tv2.kawanfilm21.co/"
+      ]
+    },
+    "klikxxi": {
+      "domains": [
+        "https://klikxxi.shop/"
+      ]
+    },
+    "layarwarna": {
+      "domains": [
+        "https://hisgloryco.com/"
+      ]
+    },
+    "ngefilm": {
+      "domains": [
+        "https://new39.ngefilm.site/"
+      ]
+    },
+    "nomat": {
+      "domains": [
+        "https://nomat.shop/"
+      ]
+    },
+    "nontonfilm": {
+      "domains": [
+        "https://surgafilm21.homes/"
+      ]
+    },
+    "pencurimovie": {
+      "domains": [
+        "https://ww11.pencurimovie.sbs/"
+      ]
+    },
+    "pusatfilm": {
+      "domains": [
+        "https://pf21.net/"
+      ]
+    },
+    "pusatmovie": {
+      "domains": [
+        "https://refugepdx.com/"
+      ]
+    },
+    "sarangfilm": {
+      "domains": [
+        "https://sarangfilm.diy/"
+      ]
+    },
+    "savefilm": {
+      "domains": [
+        "https://new13.savefilm21info.com/"
+      ]
+    },
+    "wgfilm21": {
+      "domains": [
+        "https://alternatif3.wgfilm21.net/"
+      ]
+    }
+  }
 }
