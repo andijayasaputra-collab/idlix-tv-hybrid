@@ -162,6 +162,12 @@ data class RemoteSourceConfig(
     companion object {
         const val MAX_CONFIG_BYTES = 256 * 1024
 
+        // Compiled once. Both `{` and `}` are escaped: Android's ICU engine rejects a bare `}`
+        // that desktop JVMs accept, which crashed the app at startup.
+        private val PLACEHOLDER = Regex("\\{[A-Za-z][A-Za-z0-9_]*\\}")
+        private val SAFE_SEGMENT = Regex("[A-Za-z0-9._~\\-]+")
+        private val ENCODED_DOT = Regex("%2e", RegexOption.IGNORE_CASE)
+
         val REQUIRED_ENDPOINT_KEYS: Set<String> = setOf(
             "api/movies", "api/series", "api/movies/{slug}", "api/series/{slug}",
             "api/series/{slug}/season/{season}/episode/{episode}", "api/genres", "api/search",
@@ -194,7 +200,7 @@ data class RemoteSourceConfig(
         }
 
         private fun isPlaceholder(segment: String): Boolean =
-            segment.matches(Regex("\\{[A-Za-z][A-Za-z0-9_]*}"))
+            segment.matches(PLACEHOLDER)
 
         private fun placeholders(segments: List<String>): List<String> = segments.filter(::isPlaceholder)
 
@@ -206,7 +212,7 @@ data class RemoteSourceConfig(
             require(segments.size <= 32)
             segments.forEach { segment ->
                 require(isPlaceholder(segment) ||
-                    (segment.matches(Regex("[A-Za-z0-9._~-]+")) && segment != "." && segment != "..")) {
+                    (segment.matches(SAFE_SEGMENT) && segment != "." && segment != "..")) {
                     "Invalid relative path segment"
                 }
             }
@@ -221,7 +227,7 @@ data class RemoteSourceConfig(
             val segments = path.removePrefix("/").split('/')
             if (segments.any { it.isEmpty() }) return null
             for (segment in segments) {
-                val dots = segment.replace(Regex("%2e", RegexOption.IGNORE_CASE), ".")
+                val dots = segment.replace(ENCODED_DOT, ".")
                 if (dots == "." || dots == "..") return null
                 var i = 0
                 while (i < segment.length) {
