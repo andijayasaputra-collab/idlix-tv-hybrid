@@ -95,6 +95,25 @@ data class RemoteSourceConfig(
         embedRegexes?.forEach { validateRegex(it) }
     }
 
+    /**
+     * True when every host that can receive credentials or tokens is already trusted by [anchor]
+     * (the APK's bundled config): the base URL, each declared source suffix (these also decide
+     * where the device cookie is sent), and each redeem fallback (it receives the claim token).
+     * A document therefore cannot widen trust by declaring its own domains.
+     */
+    fun staysWithin(anchor: RemoteSourceConfig): Boolean {
+        val anchorRedeemHosts = anchor.player.fallbackRedeemUrls.mapNotNull { hostOf(it) }.toSet()
+        val baseHost = hostOf(baseUrl) ?: return false
+        if (!anchor.isSourceHost(baseHost)) return false
+        if (!player.sourceHostSuffixes.all { anchor.isSourceHost(it) }) return false
+        return player.fallbackRedeemUrls.all { url ->
+            val host = hostOf(url) ?: return false
+            host in anchorRedeemHosts || anchor.isSourceHost(host)
+        }
+    }
+
+    private fun hostOf(url: String): String? = try { URI(url).host?.lowercase(Locale.ROOT) } catch (_: Exception) { null }
+
     /** Return a relative path/template. Unknown keys are a programming error. */
     fun endpoint(key: String): String = requireNotNull(endpoints[key]) { "Unknown endpoint: $key" }
 
@@ -283,8 +302,7 @@ fun effectiveConfig(
     var selected = trusted
     for (candidate in listOfNotNull(cached, remote)) {
         val valid = try { candidate.validated() } catch (_: IllegalArgumentException) { continue }
-        val host = try { java.net.URI(valid.baseUrl).host } catch (_: Exception) { null } ?: continue
-        if (!trusted.isSourceHost(host)) continue
+        if (!valid.staysWithin(trusted)) continue
         if (valid.version >= selected.version) selected = valid
     }
     return selected

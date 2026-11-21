@@ -275,6 +275,33 @@ class RemoteSourceConfigTest {
     }
 
     @Test
+    fun effectiveConfigRejectsCandidateThatWidensSourceSuffixesOrRedeemHosts() {
+        val bundled = versioned(1)
+        val widened = base().copy(
+            version = 50,
+            player = base().player.copy(sourceHostSuffixes = listOf("idlixku.com", "evil.example"))
+        )
+        val evilRedeem = base().copy(
+            version = 51,
+            player = base().player.copy(fallbackRedeemUrls = listOf("https://evil.example/api/play"))
+        )
+        widened.validated(); evilRedeem.validated()
+        assertSame(bundled, effectiveConfig(bundled, remote = widened))
+        assertSame(bundled, effectiveConfig(bundled, cached = evilRedeem))
+    }
+
+    @Test
+    fun aCachedConfigNeverBecomesTheTrustAnchorForARemoteOne() {
+        // Two-step escalation: a cache that already declares a foreign domain must not
+        // let a later remote file use that domain. Trust is always the bundled config.
+        val bundled = versioned(1)
+        val remote = versioned(5, "https://evil.example/").let {
+            it.copy(player = it.player.copy(sourceHostSuffixes = listOf("evil.example")))
+        }
+        assertSame(bundled, effectiveConfig(bundled, cached = null, remote = remote))
+    }
+
+    @Test
     fun effectiveConfigAcceptsMirrorInsideTheApkTrustedDomain() {
         val bundled = versioned(1)
         val mirror = versioned(2, "https://z9.idlixku.com/")

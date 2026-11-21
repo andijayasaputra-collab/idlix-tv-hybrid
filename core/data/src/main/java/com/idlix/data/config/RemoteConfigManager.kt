@@ -69,10 +69,10 @@ object RemoteConfigManager {
             }
             val cachedText = fallbackOnFailure { preferences?.getString(CACHE_KEY, null) }
             val cached = parseOrNull(cachedText)
-            val local = effectiveConfig(bundled, cached)
             val remoteText = fallbackOnFailure { fetchConfig(BuildConfig.REMOTE_SOURCE_CONFIG_URL) }
             val remote = parseOrNull(remoteText)
-            val selected = effectiveConfig(local, remote = remote)
+            // The APK's own bundled config is always the trust anchor, never a cached one.
+            val selected = effectiveConfig(bundled, cached, remote)
             currentCoroutineContext().ensureActive()
             if (remote != null && selected === remote && remoteText != null) {
                 // Persist only after full validation. Cache I/O failure must not block startup.
