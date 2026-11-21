@@ -73,7 +73,7 @@ object MediaSourceHelper {
     fun createHttpDataSourceFactory(tokenQuery: String): DataSource.Factory {
         val origin = com.idlix.data.api.ApiClient.getOrigin()
         val baseHttp = DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+            .setUserAgent(com.idlix.data.config.RemoteConfigManager.current.player.userAgent)
             .setDefaultRequestProperties(
                 mapOf(
                     "Referer" to "$origin/",

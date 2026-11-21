@@ -427,7 +427,7 @@ fun PlayerScreen(
             val httpDataSourceFactory = remember(tokenQuery) {
                 val origin = ApiClient.getOrigin()
                 val baseHttp = DefaultHttpDataSource.Factory()
-                    .setUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+                    .setUserAgent(com.idlix.data.config.RemoteConfigManager.current.player.userAgent)
                     .setDefaultRequestProperties(
                         mapOf(
                             "Referer" to "$origin/",

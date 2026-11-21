@@ -632,7 +632,7 @@ fun DetailScreen(
                                             val shareSlug = uiState.series?.slug?.ifBlank { slug }
                                                 ?: uiState.movie?.slug?.ifBlank { slug }
                                                 ?: slug
-                                            val shareText = context.getString(R.string.share_movie_text, title, "https://idlixku.com/$shareType/$shareSlug")
+                                            val shareText = context.getString(R.string.share_movie_text, title, "${com.idlix.data.config.RemoteConfigManager.current.baseUrl}$shareType/$shareSlug")
                                             val sendIntent = Intent().apply {
                                                 action = Intent.ACTION_SEND
                                                 putExtra(Intent.EXTRA_TEXT, shareText)

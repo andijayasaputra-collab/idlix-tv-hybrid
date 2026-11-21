@@ -32,7 +32,7 @@ class TurnstileVerificationActivity : Activity() {
 
     private var siteKey: String = ""
     private var action: String = "play"
-    private var originUrl: String = "https://z3.idlixku.com/"
+    private var originUrl: String = ApiClient.getDefaultUrl()
     private var deviceId: String = ""
     private var titleTextValue: String = "Security Verification"
     private var descTextValue: String = "Complete the security check below to start playback."
@@ -52,7 +52,7 @@ class TurnstileVerificationActivity : Activity() {
 
         siteKey = intent.getStringExtra(EXTRA_SITE_KEY).orEmpty()
         action = intent.getStringExtra(EXTRA_ACTION).orEmpty().ifBlank { "play" }
-        originUrl = intent.getStringExtra(EXTRA_ORIGIN_URL).orEmpty().ifBlank { "https://z3.idlixku.com/" }
+        originUrl = intent.getStringExtra(EXTRA_ORIGIN_URL).orEmpty().ifBlank { ApiClient.getDefaultUrl() }
         deviceId = intent.getStringExtra(EXTRA_DEVICE_ID).orEmpty().ifBlank { ApiClient.getDeviceId() }
         titleTextValue = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { titleTextValue }
         descTextValue = intent.getStringExtra(EXTRA_DESC).orEmpty().ifBlank { descTextValue }

@@ -21,8 +21,14 @@ android {
     defaultConfig {
         minSdk = 24
 
-        val backendUrl = localProperties.getProperty("backendApiUrl") ?: "https://z3.idlixku.com/"
-        buildConfigField("String", "BACKEND_API_URL", "\"$backendUrl\"")
+        // One source of truth for both bundled fallback and remote configuration.
+        val bundledSource = rootProject.file("remote-source.json").readText()
+        fun quoted(value: String) = "\"" + value.replace("\\", "\\\\")
+            .replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r") + "\""
+        buildConfigField("String", "BUNDLED_REMOTE_SOURCE_JSON", quoted(bundledSource))
+        val remoteUrl = localProperties.getProperty("remoteSourceConfigUrl")
+            ?: "https://raw.githubusercontent.com/andijayasaputra-collab/idlix-tv-hybrid/main/remote-source.json"
+        buildConfigField("String", "REMOTE_SOURCE_CONFIG_URL", quoted(remoteUrl))
     }
 
     compileOptions {

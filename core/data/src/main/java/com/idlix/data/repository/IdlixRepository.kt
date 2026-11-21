@@ -3,6 +3,8 @@ package com.idlix.data.repository
 import com.idlix.data.api.ApiClient
 import com.idlix.data.api.IdlixApiService
 import com.idlix.data.api.MajorplayApiService
+import com.idlix.data.config.RemoteConfigManager
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import com.idlix.data.local.AuthSessionStore
 import com.idlix.data.model.ApiErrorResponse
 import com.idlix.data.model.ClaimRequest
@@ -173,7 +175,7 @@ class IdlixRepository(
 
     private fun currentCacheKey(contentType: String, contentId: String): String {
         val userScope = AuthSessionStore.currentUser()?.id?.takeIf { it.isNotBlank() } ?: "guest"
-        return "$userScope:$contentType:$contentId"
+        return "${RemoteConfigManager.current.version}:${ApiClient.getBaseUrl()}:$userScope:$contentType:$contentId"
     }
 
     /**
@@ -358,7 +360,7 @@ class IdlixRepository(
             }
 
             // Poll session claim against the resolved origin so POST never hits a 301 POST->GET redirect
-            val claimUrl = "$resolvedOrigin/api/watch/session/claim"
+            val claimUrl = "$resolvedOrigin/${RemoteConfigManager.current.endpoint("api/watch/session/claim")}"
             var validClaimRes: ClaimResponse? = null
             var transientFailures = 0
 
@@ -457,7 +459,9 @@ class IdlixRepository(
             var redeemRes: com.idlix.data.model.RedeemResponse? = null
             for (candidateUrl in redeemCandidates) {
                 try {
-                    val includeDidCookie = candidateUrl.startsWith(resolvedOrigin) || candidateUrl.contains("idlix")
+                    val candidate = candidateUrl.toHttpUrlOrNull()
+                    val includeDidCookie = candidate != null &&
+                        (candidate.host == resolvedOrigin.toHttpUrlOrNull()?.host || RemoteConfigManager.current.isSourceHost(candidate.host))
                     if (includeDidCookie && activeDid.isNotBlank()) {
                         ApiClient.cookieJar.upsertCookie(candidateUrl, "did", activeDid)
                     }
@@ -526,38 +530,42 @@ class IdlixRepository(
         val cleanBase = baseUrl.trim().trimEnd('/')
         val trimmed = rawRedeemUrl.trim()
         val candidates = LinkedHashSet<String>()
+        val source = RemoteConfigManager.current
+        val apiPrefix = source.player.apiPrefix.trim('/')
+        val watchPath = "/${source.player.watchPath.trim('/')}/"
+        val apiWatchPath = "/$apiPrefix${watchPath}"
 
         if (trimmed.isNotBlank()) {
             when {
                 trimmed.startsWith("http://", ignoreCase = true) ||
                     trimmed.startsWith("https://", ignoreCase = true) -> {
-                    if (trimmed.contains("idlix") &&
-                        trimmed.contains("/watch/") &&
-                        !trimmed.contains("/api/watch/")
+                    if (trimmed.toHttpUrlOrNull()?.let { source.isSourceHost(it.host) } == true &&
+                        trimmed.contains(watchPath) &&
+                        !trimmed.contains(apiWatchPath)
                     ) {
-                        candidates.add(trimmed.replaceFirst("/watch/", "/api/watch/"))
+                        candidates.add(trimmed.replaceFirst(watchPath, apiWatchPath))
                     }
                     candidates.add(trimmed)
                 }
-                trimmed.startsWith("/api/") -> {
+                trimmed.startsWith("/$apiPrefix/") -> {
                     candidates.add("$cleanBase$trimmed")
                 }
-                trimmed.startsWith("api/") -> {
+                trimmed.startsWith("$apiPrefix/") -> {
                     candidates.add("$cleanBase/$trimmed")
                 }
                 trimmed.startsWith("/") -> {
-                    candidates.add("$cleanBase/api$trimmed")
+                    candidates.add("$cleanBase/$apiPrefix$trimmed")
                     candidates.add("$cleanBase$trimmed")
                 }
                 else -> {
-                    candidates.add("$cleanBase/api/$trimmed")
+                    candidates.add("$cleanBase/$apiPrefix/$trimmed")
                     candidates.add("$cleanBase/$trimmed")
                 }
             }
         }
 
-        candidates.add("$cleanBase/api/watch/session/redeem")
-        candidates.add("https://e2e.majorplay.net/api/play")
+        candidates.add("$cleanBase/${source.player.redeemPath}")
+        candidates.addAll(source.player.fallbackRedeemUrls)
         return candidates.toList()
     }
 
@@ -576,7 +584,7 @@ class IdlixRepository(
                 android.util.Base64.decode(rawP0, android.util.Base64.URL_SAFE)
             }
             val p0 = String(decodedBytes, Charsets.UTF_8)
-            """"owner":"d:([^"]+)"""".toRegex().find(p0)?.groupValues?.get(1)
+            RemoteConfigManager.current.player.gateOwnerRegex.toRegex().find(p0)?.groupValues?.get(1)
         } catch (_: Exception) {
             null
         }

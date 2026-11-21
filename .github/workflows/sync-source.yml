@@ -1,0 +1,65 @@
+name: Sync streaming source config
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      allow_new_domain:
+        description: 'Accept a domain outside player.sourceHostSuffixes (login cookies will be sent there)'
+        type: boolean
+        default: false
+
+# One writer at a time; a slow run must not race the next one on the same file.
+concurrency:
+  group: sync-source
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Unit tests
+        run: node --test .github/scripts/sync-source.test.mjs
+
+      - name: Check domains and update remote-source.json
+        id: sync
+        # A dead primary domain (exit 2/3/4) must not block committing the provider catalogue.
+        # The job is failed explicitly in the last step, after any commit has been pushed.
+        continue-on-error: true
+        env:
+          # Domain list for every streaming source: CloudX-V2's Website.json, the same file the
+          # CloudStream providers read to follow domain changes. Override with a repo variable.
+          SOURCE_DOMAINS_URL: ${{ vars.SOURCE_DOMAINS_URL || 'https://raw.githubusercontent.com/Asm0d3usX/CloudX-V2/builds/Website.json' }}
+          # Optional raw URL of a provider .kt file whose mainUrl seeds the API-backed source.
+          IDLIX_REFERENCE_URL: ${{ vars.IDLIX_REFERENCE_URL }}
+          ALLOW_NEW_DOMAIN: ${{ inputs.allow_new_domain == true && 'true' || 'false' }}
+        run: node .github/scripts/sync-source.mjs
+
+      - name: Commit and push
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add remote-source.json
+          git commit -m "chore: sync remote-source.json with upstream source domains"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Fail the run if the primary source needs attention
+        if: steps.sync.outcome == 'failure'
+        run: |
+          echo "Primary source check failed (see the sync step: 2 unreachable, 3 rejected, 4 contract drift)."
+          exit 1

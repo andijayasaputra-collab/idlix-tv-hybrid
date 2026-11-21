@@ -444,7 +444,7 @@ fun SettingsScreen(
 
                 Button(
                     onClick = {
-                        inputUrl = BuildConfig.BACKEND_API_URL
+                        inputUrl = ApiClient.getDefaultUrl()
                         backendTestStatus = null
                         saveMessage = null
                     },

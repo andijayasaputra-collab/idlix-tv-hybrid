@@ -2,7 +2,8 @@ package com.idlix.data.api
 
 import android.content.Context
 import android.os.Build
-import com.idlix.data.BuildConfig
+import com.idlix.data.config.RemoteConfigManager
+import com.idlix.data.config.RemoteSourceConfig
 import com.idlix.data.local.AuthSessionStore
 import com.idlix.data.local.PersistentCookieJar
 import com.idlix.data.model.ApiErrorResponse
@@ -40,7 +41,6 @@ object ApiClient {
     private const val PREF_KEY_DEVICE_ID = "device_session_id"
     private const val PREF_KEY_REFRESH_RECOVERY = "auth_refresh_recovery"
     private const val CLIENT_VERSION_HEADER_VALUE = "1.9.0"
-    private const val DEFAULT_URL = BuildConfig.BACKEND_API_URL
 
     val cookieJar = PersistentCookieJar()
     private val refreshLock = Any()
@@ -137,7 +137,19 @@ object ApiClient {
     @Volatile
     private var currentBaseUrl: String? = null
 
-    fun getDefaultUrl(): String = if (DEFAULT_URL.endsWith("/")) DEFAULT_URL else "$DEFAULT_URL/"
+    fun getDefaultUrl(): String = RemoteConfigManager.current.baseUrl
+
+    /** Called only after the startup fetch, before any screen constructs its ViewModel. */
+    fun applyRemoteConfig(config: RemoteSourceConfig) {
+        userAgentHeader = config.userAgent
+        synchronized(this) {
+            // Preserve the explicit custom-server preference; remote defaults must not replace it.
+            currentBaseUrl = null
+            _idlixApi = null
+            _majorplayApi = null
+        }
+        clearDnsCache()
+    }
 
     fun getOrigin(): String {
         return try {
@@ -146,7 +158,9 @@ object ApiClient {
             val portSuffix = if (httpUrl.port != defaultPort) ":${httpUrl.port}" else ""
             "${httpUrl.scheme}://${httpUrl.host}$portSuffix"
         } catch (_: Exception) {
-            "https://z3.idlixku.com"
+            getDefaultUrl().toHttpUrl().let { url ->
+                url.newBuilder().encodedPath("/").query(null).fragment(null).build().toString().trimEnd('/')
+            }
         }
     }
 
@@ -189,7 +203,8 @@ object ApiClient {
             return@withContext Result.failure(IllegalArgumentException("Server URL cannot be empty"))
         }
         val formatted = if (trimmed.endsWith("/")) trimmed else "$trimmed/"
-        val testEndpoint = "${formatted}api/movies?page=1&limit=1"
+        val testEndpoint = formatted.toHttpUrl().resolve(RemoteConfigManager.current.endpoint("api/movies"))!!
+            .newBuilder().addQueryParameter("page", "1").addQueryParameter("limit", "1").build()
         val start = System.currentTimeMillis()
         try {
             val req = Request.Builder()
@@ -214,6 +229,23 @@ object ApiClient {
         }
     }
 
+    // Stable Retrofit annotations are logical route identifiers, not deployment endpoints.
+    // Rewrite only requests for this backend, never subtitles, images or external players.
+    private val sourceRouteInterceptor = Interceptor { chain ->
+        val request = chain.request()
+        val config = RemoteConfigManager.current
+        val base = getBaseUrl().toHttpUrl()
+        val sameOrigin = request.url.scheme == base.scheme && request.url.host == base.host && request.url.port == base.port
+        val prefix = base.encodedPath.trimEnd('/')
+        val relativePath = request.url.encodedPath.removePrefix(prefix)
+        val mapped = if (sameOrigin && request.url.encodedPath.startsWith("$prefix/")) {
+            config.routePath(relativePath)
+        } else relativePath
+        val routed = if (mapped != relativePath) request.newBuilder()
+            .url(request.url.newBuilder().encodedPath(prefix + mapped).build()).build() else request
+        chain.proceed(routed)
+    }
+
     private val headerInterceptor = Interceptor { chain ->
         val originalRequest = chain.request()
         val defaultPort = if (originalRequest.url.scheme == "https") 443 else 80
@@ -236,17 +268,20 @@ object ApiClient {
 
         val host = originalRequest.url.host
         val path = originalRequest.url.encodedPath
-        if (path.contains("/api/auth/") && originalRequest.header("X-Client-Version") == null) {
+        val source = RemoteConfigManager.current
+        val authRequest = source.endpoints.keys.filter { it.startsWith("api/auth/") }
+            .any { source.matchesEndpoint(path, it) }
+        if (authRequest && originalRequest.header("X-Client-Version") == null) {
             builder.header("X-Client-Version", CLIENT_VERSION_HEADER_VALUE)
         }
-        if ((path.endsWith("/api/auth/login") || path.endsWith("/api/auth/register")) &&
+        if ((source.matchesEndpoint(path, "api/auth/login") || path.endsWith("/api/auth/register")) &&
             originalRequest.header("X-Client-Fp") == null
         ) {
             builder.header("X-Client-Fp", getClientFingerprint())
         }
 
         // Seed persistent device session cookie (did) into CookieJar so BridgeInterceptor merges it with auth cookies
-        if (host.contains("idlix") || path.contains("/api/watch/") || path.contains("/api/playback/") || path.contains("/api/auth/")) {
+        if (source.isSourceHost(host) || host == getBaseUrl().toHttpUrl().host) {
             cookieJar.ensureCookieIfMissing(originalRequest.url, "did", getDeviceId())
         }
 
@@ -256,22 +291,28 @@ object ApiClient {
         // so subsequent POST endpoints (/api/auth/login, /api/watch/session/claim) never hit 301 POST->GET 404s.
         val finalUrl = response.request.url
         if (originalRequest.method.equals("GET", ignoreCase = true) &&
-            host.contains("idlix", ignoreCase = true) &&
-            finalUrl.host.contains("idlix", ignoreCase = true) &&
+            source.isSourceHost(host) &&
+            source.isSourceHost(finalUrl.host) &&
             !host.equals(finalUrl.host, ignoreCase = true)
         ) {
             val finalDefaultPort = if (finalUrl.scheme == "https") 443 else 80
             val finalPortSuffix = if (finalUrl.port != finalDefaultPort) ":${finalUrl.port}" else ""
             val resolvedBase = "${finalUrl.scheme}://${finalUrl.host}$finalPortSuffix/"
             if (!getBaseUrl().equals(resolvedBase, ignoreCase = true)) {
-                setBaseUrl(resolvedBase)
+                // A discovered mirror is not an explicit user override. Do not persist it
+                // into custom_backend_url, which would pin old domains across config updates.
+                synchronized(this) {
+                    currentBaseUrl = resolvedBase
+                    _idlixApi = null
+                    _majorplayApi = null
+                }
             }
         }
 
         // Synchronize did if server provides a new Set-Cookie: did=...
         val setCookieHeaders = response.headers("Set-Cookie")
         for (header in setCookieHeaders) {
-            val match = """did=([a-fA-F0-9]{20,64})""".toRegex().find(header)
+            val match = source.player.didCookieRegex.toRegex().find(header)
             if (match != null) {
                 val serverDid = match.groupValues[1]
                 if (serverDid.isNotBlank()) {
@@ -288,6 +329,7 @@ object ApiClient {
         OkHttpClient.Builder()
             .dns(dynamicDns)
             .cookieJar(cookieJar)
+            .addInterceptor(sourceRouteInterceptor)
             .addInterceptor(headerInterceptor)
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BASIC
@@ -301,11 +343,10 @@ object ApiClient {
     private val tokenAuthenticator = Authenticator { _: Route?, response: Response ->
         val req = response.request
         val path = req.url.encodedPath
+        val source = RemoteConfigManager.current
         if (req.header("X-Auth-Retried") == "1" ||
-            path.endsWith("/api/auth/login") ||
-            path.endsWith("/api/auth/register") ||
-            path.endsWith("/api/auth/refresh") ||
-            path.endsWith("/api/auth/logout")
+            listOf("api/auth/login", "api/auth/refresh", "api/auth/logout").any { source.matchesEndpoint(path, it) } ||
+            path.endsWith("/api/auth/register")
         ) {
             return@Authenticator null
         }
@@ -326,7 +367,7 @@ object ApiClient {
             val defaultPort = if (req.url.scheme == "https") 443 else 80
             val portSuffix = if (req.url.port != defaultPort) ":${req.url.port}" else ""
             val targetOrigin = "${req.url.scheme}://${req.url.host}$portSuffix"
-            val refreshUrl = "$targetOrigin/api/auth/refresh?bootstrap=0"
+            val refreshUrl = "$targetOrigin/${source.endpoint("api/auth/refresh")}?bootstrap=0"
 
             val refreshReq = Request.Builder()
                 .url(refreshUrl)
@@ -353,7 +394,7 @@ object ApiClient {
                             Thread.sleep(150L)
                         } catch (_: InterruptedException) {}
                         val meReq = Request.Builder()
-                            .url("$targetOrigin/api/auth/me")
+                            .url("$targetOrigin/${source.endpoint("api/auth/me")}")
                             .get()
                             .header("X-Client-Version", CLIENT_VERSION_HEADER_VALUE)
                             .build()
@@ -571,7 +612,7 @@ object ApiClient {
         val testHost = try {
             getBaseUrl().toHttpUrl().host
         } catch (_: Exception) {
-            "z3.idlixku.com"
+            getDefaultUrl().toHttpUrl().host
         }
         try {
             val addresses = when (provider.lowercase()) {
@@ -599,6 +640,7 @@ object ApiClient {
             .dns(dynamicDns)
             .cookieJar(cookieJar)
             .authenticator(tokenAuthenticator)
+            .addInterceptor(sourceRouteInterceptor)
             .addInterceptor(headerInterceptor)
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BASIC

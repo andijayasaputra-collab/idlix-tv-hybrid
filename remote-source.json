@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "baseUrl": "https://z3.idlixku.com/",
+  "userAgent": "IdlixTV-Client/1.0 (Android TV)",
+  "endpoints": {
+    "api/movies": "api/movies",
+    "api/series": "api/series",
+    "api/movies/{slug}": "api/movies/{slug}",
+    "api/series/{slug}": "api/series/{slug}",
+    "api/series/{slug}/season/{season}/episode/{episode}": "api/series/{slug}/season/{season}/episode/{episode}",
+    "api/genres": "api/genres",
+    "api/search": "api/search",
+    "api/watch/play-info/movie/{id}": "api/watch/play-info/movie/{id}",
+    "api/watch/play-info/episode/{id}": "api/watch/play-info/episode/{id}",
+    "api/playback/resolve": "api/playback/resolve",
+    "api/auth/login": "api/auth/login",
+    "api/auth/me": "api/auth/me",
+    "api/auth/refresh": "api/auth/refresh",
+    "api/auth/logout": "api/auth/logout",
+    "api/auth/sessions": "api/auth/sessions",
+    "api/auth/sessions/revoke": "api/auth/sessions/revoke",
+    "api/auth/sessions/logout-others": "api/auth/sessions/logout-others",
+    "api/watch/session/claim": "api/watch/session/claim"
+  },
+  "player": {
+    "apiPrefix": "api",
+    "watchPath": "watch",
+    "redeemPath": "api/watch/session/redeem",
+    "fallbackRedeemUrls": ["https://e2e.majorplay.net/api/play"],
+    "sourceHostSuffixes": ["idlixku.com"],
+    "gateOwnerRegex": "\"owner\":\"d:([^\"]+)\"",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "didCookieRegex": "did=([a-fA-F0-9]{20,64})"
+  },
+  "selectors": {
+    "catalogue": null,
+    "episode": null
+  },
+  "embedRegexes": []
+}

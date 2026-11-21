@@ -5,6 +5,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
+import com.idlix.data.api.ApiClient
+import com.idlix.data.config.RemoteConfigManager
+import kotlinx.coroutines.launch
 import com.idlix.data.local.PlayerAppearanceStore
 import com.idlix.data.update.AppUpdateManager
 import com.idlix.mobile.player.PipController
@@ -18,9 +22,12 @@ class MainActivity : ComponentActivity() {
         PlayerAppearanceStore.init(applicationContext)
         enableEdgeToEdge()
 
-        setContent {
-            IdlixMobileTheme {
-                MainScaffold()
+        lifecycleScope.launch {
+            ApiClient.applyRemoteConfig(RemoteConfigManager.initialize(applicationContext))
+            setContent {
+                IdlixMobileTheme {
+                    MainScaffold()
+                }
             }
         }
     }

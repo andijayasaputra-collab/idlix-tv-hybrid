@@ -32,8 +32,7 @@ object OfflineDownloadManager {
     private const val TAG = "OfflineDownloadMgr"
     private const val CONCURRENT_SEGMENT_WORKERS = 4
     private const val MAX_SEGMENT_RETRIES = 3
-    private const val USER_AGENT =
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+    private val USER_AGENT: String get() = com.idlix.data.config.RemoteConfigManager.current.player.userAgent
     private val REFERER: String get() = "${ApiClient.getOrigin()}/"
     private val ORIGIN: String get() = ApiClient.getOrigin()
 
